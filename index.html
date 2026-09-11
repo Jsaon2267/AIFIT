@@ -12,7 +12,6 @@
 
     <!-- ==================== TAB 1: 今日記帳 ==================== -->
     <main v-show="currentTab === 'daily'" class="space-y-4">
-      <!-- 頂部日期與快速切換 -->
       <header class="flex items-center justify-between pt-1">
         <div>
           <h1 class="text-xl font-bold tracking-wide">🔥 熱量收支</h1>
@@ -180,7 +179,6 @@
         <p class="text-xs text-slate-400">對照熱量赤字與體態真實變化</p>
       </header>
 
-      <!-- 區間切換 -->
       <div class="grid grid-cols-2 gap-2 bg-slate-900 border border-slate-800 p-1 rounded-xl">
         <button 
           @click="statsRange = 'week'" 
@@ -298,7 +296,7 @@
         </div>
       </section>
 
-      <!-- 清除資料危險區 -->
+      <!-- 清除資料 -->
       <section class="bg-slate-900/60 border border-rose-950/50 rounded-2xl p-4 space-y-2">
         <h2 class="text-xs font-semibold text-rose-500">重置所有紀錄</h2>
         <p class="text-[10px] text-slate-500">這將清空所有飲食、運動、體重歷史資料，且無法復原。</p>
@@ -348,19 +346,27 @@
 
     createApp({
       setup() {
-        const todayStr = new Date().toISOString().split('T')[0];
+        // 抓取本地設備當前實際日期 (YYYY-MM-DD)
+        const getLocalDateString = () => {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+
+        const todayStr = getLocalDateString();
         const currentTab = ref('daily');
         const selectedDate = ref(todayStr);
         const activeEntryType = ref('food');
-        const statsRange = ref('week'); // 'week' | 'month'
+        const statsRange = ref('week');
 
-        const tdee = ref(2000);
+        const tdee = ref(2050);
         const entries = ref([]);
-        const bodyMetrics = ref({}); // 格式: { "2026-09-12": { weight: 72.5, fat: 18.0 } }
+        const bodyMetrics = ref({});
 
         const form = ref({ name: '', calories: '' });
 
-        // 讀取 LocalStorage
         onMounted(() => {
           const savedEntries = localStorage.getItem('vibe_calorie_entries');
           if (savedEntries) entries.value = JSON.parse(savedEntries);
@@ -372,17 +378,14 @@
           if (savedTdee) tdee.value = parseInt(savedTdee, 10);
         });
 
-        // 監聽並同步 entries 到 LocalStorage
         watch(entries, (val) => {
           localStorage.setItem('vibe_calorie_entries', JSON.stringify(val));
         }, { deep: true });
 
-        // 當日明細篩選
         const todayEntries = computed(() => {
           return entries.value.filter(e => e.date === selectedDate.value);
         });
 
-        // 當日飲食與運動計算
         const todayTotalIntake = computed(() => {
           return todayEntries.value.filter(e => e.type === 'food').reduce((sum, e) => sum + e.calories, 0);
         });
@@ -404,7 +407,6 @@
           return budget <= 0 ? 0 : Math.round((todayTotalIntake.value / budget) * 100);
         });
 
-        // 當日體態物件雙向綁定
         const currentBodyMetric = computed(() => {
           if (!bodyMetrics.value[selectedDate.value]) {
             bodyMetrics.value[selectedDate.value] = { weight: null, fat: null };
@@ -420,7 +422,6 @@
           localStorage.setItem('vibe_calorie_tdee', tdee.value);
         };
 
-        // 新增一筆流水帳
         const addEntry = () => {
           if (!form.value.name || !form.value.calories) return;
           const now = new Date();
@@ -443,26 +444,29 @@
           entries.value = entries.value.filter(e => e.id !== id);
         };
 
-        // 週期統計計算
         const periodDays = computed(() => {
           const daysCount = statsRange.value === 'week' ? 7 : 30;
           const list = [];
-          const curr = new Date(selectedDate.value);
+          const [y, m, d] = selectedDate.value.split('-').map(Number);
+          const curr = new Date(y, m - 1, d);
 
           for (let i = 0; i < daysCount; i++) {
-            const d = new Date(curr);
-            d.setDate(curr.getDate() - i);
-            const dStr = d.toISOString().split('T')[0];
+            const targetDate = new Date(curr);
+            targetDate.setDate(curr.getDate() - i);
+            const yStr = targetDate.getFullYear();
+            const mStr = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dStr = String(targetDate.getDate()).padStart(2, '0');
+            const formattedDate = `${yStr}-${mStr}-${dStr}`;
 
-            const dayEntries = entries.value.filter(e => e.date === dStr);
+            const dayEntries = entries.value.filter(e => e.date === formattedDate);
             const intake = dayEntries.filter(e => e.type === 'food').reduce((s, e) => s + e.calories, 0);
             const burned = dayEntries.filter(e => e.type === 'workout').reduce((s, e) => s + e.calories, 0);
             const net = intake - (tdee.value + burned);
 
-            const metric = bodyMetrics.value[dStr] || {};
+            const metric = bodyMetrics.value[formattedDate] || {};
 
             list.push({
-              date: dStr,
+              date: formattedDate,
               intake,
               burned,
               net,
@@ -478,7 +482,6 @@
           const netBalance = days.reduce((sum, d) => sum + d.net, 0);
           const theoreticalFatKg = Number((netBalance / 7700).toFixed(2));
 
-          // 計算首末日體重體脂變化 (從最舊到最新)
           const chronDays = [...days].reverse();
           const weightEntries = chronDays.filter(d => d.weight !== null);
           const fatEntries = chronDays.filter(d => d.fat !== null);
@@ -501,7 +504,6 @@
           };
         });
 
-        // 匯出備份 JSON
         const exportBackup = () => {
           const backupData = {
             tdee: tdee.value,
@@ -518,7 +520,6 @@
           URL.revokeObjectURL(url);
         };
 
-        // 匯入還原 JSON
         const importBackup = (event) => {
           const file = event.target.files[0];
           if (!file) return;
@@ -543,7 +544,6 @@
           reader.readAsText(file);
         };
 
-        // 清空重置
         const resetAllData = () => {
           if (confirm('確定要清空所有紀錄嗎？建議清空前先匯出備份。')) {
             entries.value = [];
