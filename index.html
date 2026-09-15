@@ -14,8 +14,8 @@
     <main v-show="currentTab === 'daily'" class="space-y-4">
       <header class="flex items-center justify-between pt-1">
         <div>
-          <h1 class="text-xl font-bold tracking-wide">🔥 熱量收支</h1>
-          <p class="text-xs text-slate-400">TDEE 目標: {{ tdee }} kcal</p>
+          <h1 class="text-xl font-bold tracking-wide">🔥 熱量與飲食收支</h1>
+          <p class="text-xs text-slate-400">TDEE: {{ tdee }} kcal ｜ 蛋白質目標: {{ proteinTarget }}g</p>
         </div>
         <input 
           type="date" 
@@ -24,7 +24,7 @@
         >
       </header>
 
-      <!-- 今日儀表板 -->
+      <!-- 今日熱量儀表板 -->
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
         <div class="grid grid-cols-3 gap-2 text-center">
           <div class="bg-slate-800/60 rounded-xl p-2.5">
@@ -43,7 +43,7 @@
           </div>
         </div>
 
-        <!-- 預算進度條 -->
+        <!-- 熱量預算進度條 -->
         <div class="space-y-1">
           <div class="flex justify-between text-xs font-medium">
             <span class="text-slate-400">剩餘可攝取熱量</span>
@@ -56,6 +56,23 @@
               class="h-full transition-all duration-300"
               :class="todayBudgetPercentage > 100 ? 'bg-rose-500' : 'bg-blue-500'"
               :style="{ width: Math.min(todayBudgetPercentage, 100) + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- 蛋白質達成度進度條 -->
+        <div class="pt-2 border-t border-slate-800 space-y-1">
+          <div class="flex justify-between text-xs font-medium">
+            <span class="text-indigo-300 font-semibold">🥩 今日蛋白質攝取</span>
+            <span class="text-slate-200">
+              <strong class="text-indigo-400 text-sm">{{ todayTotalProtein }}</strong> / {{ proteinTarget }} g
+              <span class="text-[10px] text-slate-400 ml-1">({{ todayProteinPercentage }}%)</span>
+            </span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div 
+              class="h-full bg-indigo-500 transition-all duration-300"
+              :style="{ width: Math.min(todayProteinPercentage, 100) + '%' }"
             ></div>
           </div>
         </div>
@@ -95,7 +112,7 @@
         </div>
       </section>
 
-      <!-- 飲食 / 運動 輸入 -->
+      <!-- 飲食 / 運動 輸入區塊 -->
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
         <div class="grid grid-cols-2 gap-2 bg-slate-800/80 p-1 rounded-xl">
           <button 
@@ -118,23 +135,36 @@
           <input 
             v-model.trim="form.name" 
             type="text" 
-            :placeholder="activeEntryType === 'food' ? '餐點名稱 (如：排骨便當、無糖拿鐵)' : '運動名稱 (如：慢跑 30 分鐘)'" 
+            :placeholder="activeEntryType === 'food' ? '餐點名稱 (如：雞腿排鐵板麵、無糖豆漿)' : '運動名稱 (如：羽球雙打 90 分鐘)'" 
             required
             class="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-500"
           >
+          
           <div class="flex space-x-2">
             <input 
               v-model.number="form.calories" 
               type="number" 
-              placeholder="卡路里 (kcal)" 
+              placeholder="熱量 (kcal)" 
               min="1" 
               required
               class="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-500"
             >
+            
+            <!-- 記飲食時顯示蛋白質欄位 -->
+            <input 
+              v-if="activeEntryType === 'food'"
+              v-model.number="form.protein" 
+              type="number" 
+              step="0.1"
+              placeholder="蛋白質 (g)" 
+              min="0"
+              class="w-36 bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+            >
+
             <button 
               type="submit" 
               :class="activeEntryType === 'food' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-500 hover:bg-amber-600'"
-              class="text-slate-950 font-bold px-6 py-2.5 rounded-xl text-sm transition-colors whitespace-nowrap"
+              class="text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm transition-colors whitespace-nowrap"
             >
               新增
             </button>
@@ -142,7 +172,7 @@
         </form>
       </section>
 
-      <!-- 當日明細清單 -->
+      <!-- 當日明細流水帳 -->
       <section class="space-y-2">
         <h2 class="text-xs font-semibold text-slate-400 px-1">明細流水帳 ({{ todayEntries.length }})</h2>
         <div v-if="todayEntries.length === 0" class="text-center py-6 text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-slate-800/40">
@@ -155,10 +185,15 @@
             class="flex items-center justify-between bg-slate-900 border border-slate-800 px-3.5 py-2.5 rounded-xl"
           >
             <div class="flex items-center space-x-3">
-              <span>{{ item.type === 'food' ? '🍴' : '🏃' }}</span>
+              <span class="text-base">{{ item.type === 'food' ? '🍴' : '🏃' }}</span>
               <div>
                 <p class="text-sm font-medium text-slate-200">{{ item.name }}</p>
-                <p class="text-xs text-slate-500">{{ item.time }}</p>
+                <div class="flex items-center space-x-2 text-[11px] text-slate-500">
+                  <span>{{ item.time }}</span>
+                  <span v-if="item.type === 'food' && item.protein" class="text-indigo-400 font-medium">
+                    🥩 {{ item.protein }}g 蛋白質
+                  </span>
+                </div>
               </div>
             </div>
             <div class="flex items-center space-x-3">
@@ -176,7 +211,7 @@
     <main v-show="currentTab === 'stats'" class="space-y-4">
       <header class="pt-1">
         <h1 class="text-xl font-bold tracking-wide">📊 週期與減脂分析</h1>
-        <p class="text-xs text-slate-400">對照熱量赤字與體態真實變化</p>
+        <p class="text-xs text-slate-400">對照熱量赤字、蛋白質與體態真實變化</p>
       </header>
 
       <div class="grid grid-cols-2 gap-2 bg-slate-900 border border-slate-800 p-1 rounded-xl">
@@ -196,7 +231,7 @@
         </button>
       </div>
 
-      <!-- 核心統計指標卡片 -->
+      <!-- 核心指標卡片 -->
       <section class="grid grid-cols-2 gap-2.5">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
           <p class="text-xs text-slate-400">累計熱量差</p>
@@ -207,11 +242,11 @@
         </div>
 
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <p class="text-xs text-slate-400">理論脂肪增減</p>
-          <p class="text-lg font-bold mt-1" :class="periodStats.theoreticalFatKg <= 0 ? 'text-emerald-400' : 'text-rose-400'">
-            {{ periodStats.theoreticalFatKg > 0 ? '+' + periodStats.theoreticalFatKg : periodStats.theoreticalFatKg }} kg
+          <p class="text-xs text-slate-400">日均蛋白質</p>
+          <p class="text-lg font-bold mt-1 text-indigo-400">
+            {{ periodStats.avgProtein }} g
           </p>
-          <p class="text-[10px] text-slate-500 mt-1">以 7700 kcal / kg 估算</p>
+          <p class="text-[10px] text-slate-500 mt-1">目標: {{ proteinTarget }} g / 日</p>
         </div>
 
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
@@ -223,11 +258,11 @@
         </div>
 
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <p class="text-xs text-slate-400">體脂實際變化</p>
-          <p class="text-lg font-bold mt-1 text-slate-100">
-            {{ periodStats.fatDiff !== null ? (periodStats.fatDiff > 0 ? '+' : '') + periodStats.fatDiff + ' %' : '無數據' }}
+          <p class="text-xs text-slate-400">理論脂肪增減</p>
+          <p class="text-lg font-bold mt-1" :class="periodStats.theoreticalFatKg <= 0 ? 'text-emerald-400' : 'text-rose-400'">
+            {{ periodStats.theoreticalFatKg > 0 ? '+' + periodStats.theoreticalFatKg : periodStats.theoreticalFatKg }} kg
           </p>
-          <p class="text-[10px] text-slate-500 mt-1">區間首日 vs 末日</p>
+          <p class="text-[10px] text-slate-500 mt-1">以 7700 kcal / kg 估算</p>
         </div>
       </section>
 
@@ -238,7 +273,9 @@
           <div v-for="d in periodDays" :key="d.date" class="py-2 flex items-center justify-between text-xs">
             <div>
               <p class="font-medium text-slate-200">{{ d.date }}</p>
-              <p class="text-[10px] text-slate-500">攝取 +{{ d.intake }} | 運動 -{{ d.burned }}</p>
+              <p class="text-[10px] text-slate-500">
+                攝取 +{{ d.intake }} | 運動 -{{ d.burned }} | 🥩 {{ d.protein }}g
+              </p>
             </div>
             <div class="text-right">
               <p class="font-bold" :class="d.net <= 0 ? 'text-blue-400' : 'text-rose-400'">
@@ -257,20 +294,32 @@
     <main v-show="currentTab === 'settings'" class="space-y-4">
       <header class="pt-1">
         <h1 class="text-xl font-bold tracking-wide">⚙️ 設定與資料備份</h1>
-        <p class="text-xs text-slate-400">管理基礎參數與本地備份檔案</p>
+        <p class="text-xs text-slate-400">管理基礎熱量、營養素目標與本地備份</p>
       </header>
 
-      <!-- TDEE 設定 -->
+      <!-- 基礎參數設定 -->
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <h2 class="text-xs font-semibold text-slate-400">基礎代謝與活動消耗 (TDEE)</h2>
-        <div class="flex space-x-2">
+        <h2 class="text-xs font-semibold text-slate-400">熱量與蛋白質目標</h2>
+        
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">每日 TDEE 目標 (kcal)</label>
           <input 
             type="number" 
             v-model.number="tdee" 
-            @change="saveTdee"
+            @change="saveSettings"
             class="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500"
           >
-          <span class="flex items-center text-xs text-slate-400">kcal / 日</span>
+        </div>
+
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">每日蛋白質目標 (g)</label>
+          <input 
+            type="number" 
+            v-model.number="proteinTarget" 
+            @change="saveSettings"
+            class="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-indigo-500"
+          >
+          <p class="text-[10px] text-slate-500 mt-1">建議依體重維持 110 ~ 130g 之間保護骨骼肌</p>
         </div>
       </section>
 
@@ -278,7 +327,7 @@
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
         <h2 class="text-xs font-semibold text-slate-400">資料備份與防遺失</h2>
         <p class="text-xs text-slate-500 leading-relaxed">
-          資料目前完整保存在手機瀏覽器中。建議每週或換手機前點選「匯出備份」，下載 JSON 檔案保存。
+          資料儲存在手機本機。建議定期點選「匯出備份」下載 JSON 檔保存。
         </p>
 
         <div class="grid grid-cols-2 gap-2 pt-1">
@@ -296,10 +345,10 @@
         </div>
       </section>
 
-      <!-- 清除資料 -->
+      <!-- 清除資料危險區 -->
       <section class="bg-slate-900/60 border border-rose-950/50 rounded-2xl p-4 space-y-2">
         <h2 class="text-xs font-semibold text-rose-500">重置所有紀錄</h2>
-        <p class="text-[10px] text-slate-500">這將清空所有飲食、運動、體重歷史資料，且無法復原。</p>
+        <p class="text-[10px] text-slate-500">清空所有紀錄且無法復原。</p>
         <button 
           @click="resetAllData" 
           class="w-full bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/60 text-rose-300 py-2 rounded-xl text-xs transition-colors"
@@ -335,7 +384,7 @@
         class="flex flex-col items-center justify-center space-y-1 py-1"
       >
         <span class="text-base">⚙️</span>
-        <span class="text-[10px]">備份設定</span>
+        <span class="text-[10px]">設定與備份</span>
       </button>
     </nav>
 
@@ -346,7 +395,6 @@
 
     createApp({
       setup() {
-        // 抓取本地設備當前實際日期 (YYYY-MM-DD)
         const getLocalDateString = () => {
           const now = new Date();
           const year = now.getFullYear();
@@ -362,10 +410,11 @@
         const statsRange = ref('week');
 
         const tdee = ref(2050);
+        const proteinTarget = ref(110); // 預設每日蛋白質目標 110g
         const entries = ref([]);
         const bodyMetrics = ref({});
 
-        const form = ref({ name: '', calories: '' });
+        const form = ref({ name: '', calories: '', protein: '' });
 
         onMounted(() => {
           const savedEntries = localStorage.getItem('vibe_calorie_entries');
@@ -376,6 +425,9 @@
 
           const savedTdee = localStorage.getItem('vibe_calorie_tdee');
           if (savedTdee) tdee.value = parseInt(savedTdee, 10);
+
+          const savedProtein = localStorage.getItem('vibe_calorie_protein_target');
+          if (savedProtein) proteinTarget.value = parseInt(savedProtein, 10);
         });
 
         watch(entries, (val) => {
@@ -388,6 +440,17 @@
 
         const todayTotalIntake = computed(() => {
           return todayEntries.value.filter(e => e.type === 'food').reduce((sum, e) => sum + e.calories, 0);
+        });
+
+        const todayTotalProtein = computed(() => {
+          return Math.round(todayEntries.value
+            .filter(e => e.type === 'food')
+            .reduce((sum, e) => sum + (Number(e.protein) || 0), 0) * 10) / 10;
+        });
+
+        const todayProteinPercentage = computed(() => {
+          if (!proteinTarget.value || proteinTarget.value <= 0) return 0;
+          return Math.round((todayTotalProtein.value / proteinTarget.value) * 100);
         });
 
         const todayTotalBurned = computed(() => {
@@ -418,8 +481,9 @@
           localStorage.setItem('vibe_calorie_metrics', JSON.stringify(bodyMetrics.value));
         };
 
-        const saveTdee = () => {
+        const saveSettings = () => {
           localStorage.setItem('vibe_calorie_tdee', tdee.value);
+          localStorage.setItem('vibe_calorie_protein_target', proteinTarget.value);
         };
 
         const addEntry = () => {
@@ -433,11 +497,13 @@
             time: timeStr,
             type: activeEntryType.value,
             name: form.value.name,
-            calories: Number(form.value.calories)
+            calories: Number(form.value.calories),
+            protein: activeEntryType.value === 'food' ? (Number(form.value.protein) || 0) : 0
           });
 
           form.value.name = '';
           form.value.calories = '';
+          form.value.protein = '';
         };
 
         const deleteEntry = (id) => {
@@ -460,6 +526,7 @@
 
             const dayEntries = entries.value.filter(e => e.date === formattedDate);
             const intake = dayEntries.filter(e => e.type === 'food').reduce((s, e) => s + e.calories, 0);
+            const protein = Math.round(dayEntries.filter(e => e.type === 'food').reduce((s, e) => s + (Number(e.protein) || 0), 0) * 10) / 10;
             const burned = dayEntries.filter(e => e.type === 'workout').reduce((s, e) => s + e.calories, 0);
             const net = intake - (tdee.value + burned);
 
@@ -468,6 +535,7 @@
             list.push({
               date: formattedDate,
               intake,
+              protein,
               burned,
               net,
               weight: metric.weight || null,
@@ -481,6 +549,8 @@
           const days = periodDays.value;
           const netBalance = days.reduce((sum, d) => sum + d.net, 0);
           const theoreticalFatKg = Number((netBalance / 7700).toFixed(2));
+          const totalProtein = days.reduce((sum, d) => sum + d.protein, 0);
+          const avgProtein = days.length > 0 ? Number((totalProtein / days.length).toFixed(1)) : 0;
 
           const chronDays = [...days].reverse();
           const weightEntries = chronDays.filter(d => d.weight !== null);
@@ -499,6 +569,7 @@
           return {
             netBalance,
             theoreticalFatKg,
+            avgProtein,
             weightDiff,
             fatDiff
           };
@@ -507,6 +578,7 @@
         const exportBackup = () => {
           const backupData = {
             tdee: tdee.value,
+            proteinTarget: proteinTarget.value,
             entries: entries.value,
             bodyMetrics: bodyMetrics.value,
             exportAt: new Date().toISOString()
@@ -531,10 +603,12 @@
               if (data.entries) entries.value = data.entries;
               if (data.bodyMetrics) bodyMetrics.value = data.bodyMetrics;
               if (data.tdee) tdee.value = data.tdee;
+              if (data.proteinTarget) proteinTarget.value = data.proteinTarget;
 
               localStorage.setItem('vibe_calorie_entries', JSON.stringify(entries.value));
               localStorage.setItem('vibe_calorie_metrics', JSON.stringify(bodyMetrics.value));
               localStorage.setItem('vibe_calorie_tdee', tdee.value);
+              localStorage.setItem('vibe_calorie_protein_target', proteinTarget.value);
 
               alert('資料還原成功！');
             } catch (err) {
@@ -560,9 +634,12 @@
           activeEntryType,
           statsRange,
           tdee,
+          proteinTarget,
           form,
           todayEntries,
           todayTotalIntake,
+          todayTotalProtein,
+          todayProteinPercentage,
           todayTotalBurned,
           todayNetCalories,
           todayRemainingBudget,
@@ -571,7 +648,7 @@
           periodDays,
           periodStats,
           saveBodyMetrics,
-          saveTdee,
+          saveSettings,
           addEntry,
           deleteEntry,
           exportBackup,
